@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en-US">
+    <head>
+        <!-- Standard -->
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>CC Visual Explorer</title>
+        <style>
+            body{ 
+                margin: 0;
+                padding: 0;
+                width:100%;
+                height:100%;
+                position: fixed;
+                overflow: hidden;
+                font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif;
+                background-color: #000012;
+            }
+            #project{
+                position: fixed;
+                z-index: 500;
+                top:0px;
+                left:0px;
+                padding-top:12px;
+                padding-left:25px;
+                color:white;
+                font-weight: 200;
+                font-size:19px;
+                opacity: .95;
+            }
+            #controls{
+                position: fixed;
+                z-index: 500;
+                top:0px;
+                right:0px;
+                padding-top:20px;
+                padding-right:25px;
+                color:white;
+                font-size:13px;
+                opacity: .9;
+                text-align: right;
+            }
+            #search{
+                width: 230px;
+                padding: 5px;
+                margin-top: 18px;
+                margin-bottom: 12px;
+                border-radius: 2px;
+                opacity:1;
+                background-color: white;
+            }
+            .radio{
+                padding-right:5px;
+            }
+            a{
+                color:white;
+            }
+            #callout{
+                position:fixed;
+                padding-left:35px;
+                right:0;
+                top:0;
+                background-color: rgba(255, 255, 255, 0.98);
+                width:350px;
+                height:100%;
+                z-index:999;
+                display:none;
+                overflow-x: hidden;
+                overflow-y: scroll;
+                line-height: 20px;
+            }
+            #callout-close{
+                font-size:22px;
+                font-weight: bold;
+                cursor: pointer;
+                border-radius: 50%;
+                padding:4px;
+                right:10px;
+                top:8px;
+                text-align: right;
+                position:fixed;
+            }
+            .calloutHeader{
+                margin-top:20px;
+                font-weight: bolder;
+            }
+            .aboutInfoQuestion{
+                margin-top: 10px;
+                color: #666;
+                font-size: 13px;
+            }
+            .aboutTag{
+                color: #666;
+                font-size: 13px;
+            }
+            .aboutWebMatch{
+                color: #0066CC;
+                font-size: 12px;
+            }
+            #callout-license-linkholder,#callout-license-linkholder a{
+                color: #666;
+                font-size: 15px;
+            }
+        </style>
+        <script src="https://unpkg.com/lodash@1.0.2/dist/lodash.min.js"></script>
+        <script src="https://unpkg.com/three"></script>
+        <script src="https://unpkg.com/three-spritetext"></script>
+        <script src="https://unpkg.com/3d-force-graph"></script>
+    </head>
+    <body>
+
+        <!-- Project -->
+        <div id="project">CC Visual Explorer</div>
+        
+        <!-- Graph -->
+        <div id="3d-graph"></div>
+
+        <!-- Callout -->
+        <div id="callout">
+
+            <!-- Close -->
+            <div id="callout-close" onclick="callOutClose();updateGraph();">x</div>
+
+            <!-- Title -->
+            <div class="calloutHeader">Title</div>
+            <div id="callout-title">-</div>
+            <div>
+                <button id="callout-download-button" data-activeid="123" data-activename="123" onclick="downloadFile()">
+                    Download
+                </button>
+            </div>
+
+            <!-- License -->
+            <div class="calloutHeader">License</div>
+            <div id="callout-license">-</div>
+            <div id="callout-license-linkholder">(<a href="https://license.harbourshare.com/#hs_cos_wrapper_widget_1634313919356_" target="_blank">Learn more</a>)</div>
+
+            <!-- About -->
+            <div class="calloutHeader">About</div>
+            <div id="callout-about">-</div>
+
+            <!-- Tags -->
+            <div class="calloutHeader">Tags</div>
+            <div id="callout-tags">-</div>
+
+            <!-- Tags -->
+            <div class="calloutHeader">Web Matches</div>
+            <div id="callout-webmatches">-</div>
+
+        </div>
+
+        <!-- Controls/filters -->
+        <div id="controls" class="control">
+            <label class="radio">
+                <input type="radio" value="All" name="license" onclick="updateFilters()" checked>
+                All
+            </label>
+            <label class="radio">
+                <input type="radio" value="CC0 1.0" onclick="updateFilters()" name="license">
+                CC0 1.0
+            </label>
+            <label class="radio">
+                <input type="radio" value="CC BY 4.0" onclick="updateFilters()" name="license">
+                CC BY 4.0
+            </label>
+            <label class="radio">
+                <input type="radio" value="CC BY-SA 4.0" onclick="updateFilters()" name="license">
+                CC BY-SA 4.0
+            </label>
+            <label class="radio">
+                <input type="radio" value="CC BY-ND 4.0" onclick="updateFilters()" name="license">
+                CC BY-ND 4.0
+            </label>
+            &nbsp;(<a href="https://license.harbourshare.com" target="_blank">Learn about license types</a>)
+            <BR>
+            <input id="search" class="input" type="text" onkeyup="debouncedUpdateFilters()" placeholder="🔍 Search by name or description">
+            <BR>
+            &#9654;&nbsp;
+            <a href="https://license.harbourshare.com" target="_blank">Submit or request new CC content</a>
+        </div>
+        
+        <!-- Action! -->
+        <script>
+
+            //Init
+            let graph = null;
+            let graphElem = document.getElementById("3d-graph");
+            let calloutElem = document.getElementById("callout");
+            let licenseValue = "";
+            let searchValue = "";
+
+            //Update graph with latest layout/nodes/content
+            function updateGraph(){
+
+                //Clear any prior graph elements
+                graphElem.innerHTML = "";
+                callOutClose();
+
+                //Get latest graph data
+                let url = `https://us-central1-harbour-prod-webapp.cloudfunctions.net/specialproject-grantfortheweb-licensingvisualization?output=json&licensefilter=${licenseValue}&searchfilter=${searchValue}`;
+                let xmlhttp = new XMLHttpRequest();
+                xmlhttp.onreadystatechange = function() {
+                    if (xmlhttp.readyState == XMLHttpRequest.DONE) {
+                    if (xmlhttp.status == 200) {
+                        let responseText = xmlhttp.responseText;
+                        let graphDataJson = JSON.parse(responseText);
+                        console.log("graphDataJson",graphDataJson);
+                        buildGraph(graphDataJson);
+                    }
+                    else if (xmlhttp.status == 400) {
+                        alert('There was an error 400');
+                    }
+                    else {
+                        alert('something else other than 200 was returned');
+                    }
+                    }
+                };
+                xmlhttp.open("GET", url, true);
+                xmlhttp.send();
+
+            }
+
+            //Create/render new graph
+            function buildGraph(graphDataJson){
+                const graph = ForceGraph3D()(graphElem)
+                .graphData(graphDataJson)
+                .nodeThreeObject(node => {
+
+                    //Add background sphere draggable object to node
+                    let imgTexture = null;
+                    if(node.assetpreview_base64img != null){
+                        //Render image preview
+                        imgTexture = new THREE.TextureLoader().load(`${node.assetpreview_base64img}`);
+                    }else{
+                        //Render transparent placeholder image
+                        imgTexture = new THREE.TextureLoader().load(`data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7`);
+                    }
+                    const material = new THREE.SpriteMaterial({ map: imgTexture });
+                    const sprite = new THREE.Sprite(material);
+                    sprite.scale.set(12, 12);
+
+                    //Add foreground text label to node
+                    let filenameNoExtension = node.assetfile_filename.split(".")[0];
+                    filenameNoExtension = truncateText(filenameNoExtension,40);
+                    const label = new SpriteText("\n" + filenameNoExtension);
+                    label.material.depthWrite = false; // make sprite background transparent
+                    label.textHeight = 0.3;
+                    sprite.add(label)
+
+                    //Return for rendering
+                    return sprite;
+
+                })
+                .nodeOpacity(0)
+                .onNodeDrag(node => {
+                    callOutClose();
+                })
+                .onBackgroundClick(node => {
+                    callOutClose();
+                })
+                .onNodeClick(node => {
+
+                    //Clear any prior callout
+                    callOutClose();
+
+                    //Info
+                    console.log("-- selected node:",node);
+
+                    //Populate filename
+                    calloutElem.querySelector('#callout-title').innerText = node.assetdisplay_preferredname;
+
+                    //Populate license
+                    calloutElem.querySelector('#callout-license').innerText = node.asset_licensetype
+
+                    //Populate about/item info
+                    calloutElem.querySelector('#callout-about').innerText = "";
+                    let aboutElement =  document.createElement("div");
+                    node.assetsource_contextsourcejson.agreementitemvaluesjsonarray.forEach(function(d){
+                        let aboutInfo = document.createElement("div");
+                        aboutInfo.className = "aboutInfo";
+                        let aboutInfoQuestion = document.createElement("div");
+                        let aboutInfoAnswer = document.createElement("div");
+                        aboutInfoQuestion.innerText = (d.itemrecordlabel + "");
+                        aboutInfoQuestion.className = "aboutInfoQuestion";
+                        aboutInfoAnswer.innerText = (d.itemvalue + "");
+                        aboutInfoAnswer.className = "aboutInfoAnswer";
+                        aboutInfo.appendChild(aboutInfoQuestion);
+                        aboutInfo.appendChild(aboutInfoAnswer);
+                        if(d.itemvalue.includes("@") == false){
+                            aboutElement.appendChild(aboutInfo);
+                        }
+                    });
+                    calloutElem.querySelector('#callout-about').appendChild(aboutElement);
+
+                    //Populate tags
+                    calloutElem.querySelector('#callout-tags').innerText = "";
+                    let tagsElement = document.createElement("div");
+                    node.assettags_visioninfojsonarray.forEach(function(d){
+                        let tagElement = document.createElement("div");
+                        tagElement.className = "aboutTag";
+                        tagElement.innerText = "#" + d.tagvalue;
+                        if((d.tagvalue).includes("rgb") == false){
+                            tagsElement.appendChild(tagElement);
+                        }
+                    });
+                    calloutElem.querySelector('#callout-tags').appendChild(tagsElement);
+
+                    //Populate tags
+                    calloutElem.querySelector('#callout-webmatches').innerText = "";
+                    let webmatchesElement = document.createElement("div");
+                    node.assettags_visionwebmatchesjsonarray.forEach(function(d){
+                        let webmatchElement = document.createElement("div");
+                        webmatchElement.innerText = "🔗 ";
+                        webmatchElement.className = "aboutWebMatch";
+                        let webmatchElementUrl = document.createElement("a");
+                        webmatchElementUrl.className = "aboutWebMatch";
+                        webmatchElementUrl.innerText = truncateText(d.tagvalue,200);
+                        webmatchElementUrl.setAttribute("href",d.tagvalue);
+                        webmatchElementUrl.setAttribute("target","_blank");
+                        webmatchElement.appendChild(webmatchElementUrl);
+                        webmatchesElement.appendChild(webmatchElement);
+                    });
+                    calloutElem.querySelector('#callout-webmatches').appendChild(webmatchesElement);
+                    if(node.assettags_visionwebmatchesjsonarray.length == 0){
+                        calloutElem.querySelector('#callout-webmatches').innerText = "- none found -";
+                    }
+
+                    //Store download/storage id (*read/prompts download on click)
+                    calloutElem.querySelector('#callout-download-button').setAttribute("data-activeid",node.asset_storageid);
+                    calloutElem.querySelector('#callout-download-button').setAttribute("data-activename",node.assetfile_filename);
+
+                    //Zoom into node and show new callout
+                    const distance = 40;
+                    const distRatio = 1 + distance/Math.hypot(node.x, node.y, node.z);
+                    graph.cameraPosition(
+                        { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio }, // new position
+                        node, // lookAt ({ x, y, z })
+                        2000  // ms transition duration
+                    );
+                    setTimeout(function(){
+                        calloutElem.style.display = "block";
+                    }, 1900);
+
+                })
+                .linkThreeObjectExtend(true)
+                .linkThreeObject(link => {
+                    const sprite = new SpriteText(`${link.label}`);
+                    sprite.color = 'darkgrey';
+                    sprite.textHeight = .75;
+                    return sprite;
+                })
+                .linkPositionUpdate((sprite, { start, end }) => {
+                    const middlePos = Object.assign(...['x', 'y', 'z'].map(c => ({
+                        [c]: start[c] + (end[c] - start[c]) / 2 // calc middle point
+                    })));
+                    Object.assign(sprite.position, middlePos);
+                });
+                graph.d3Force('charge').strength(-120); //*widen links
+            }
+
+            //Apply UI filters
+            function updateFilters(){ 
+                licenseValue = document.querySelector('input[name="license"]:checked').value;
+                searchValue = document.querySelector('#search').value;
+                updateGraph();
+            }
+            const debouncedUpdateFilters = _.debounce(updateFilters, 300);
+
+            //Go to download
+            function downloadFile(){
+                let downloadId = document.querySelector('#callout-download-button').getAttribute("data-activeid");
+                let downloadName = document.querySelector('#callout-download-button').getAttribute("data-activename");
+                window.open("/specialproject-grantfortheweb-licensingvisualization?download=" + downloadId + "&name=" + encodeURIComponent(downloadName));
+                return false;
+            }
+
+            //Truncate text
+            function truncateText(inputText, maxChars) {
+                if(inputText.length > maxChars){
+                    return inputText.slice(0, maxChars) + "...";
+                }
+                return inputText;
+            }
+
+            //Close callout
+            function callOutClose(){
+                calloutElem.style.display = "none";
+            }
+
+            //Update on resize
+            window.onresize = function(){
+                //updateGraph();
+                return false;
+            }
+
+            //Inital render
+            updateGraph();
+
+        </script>
+    </body>
+</html>
