@@ -7,6 +7,9 @@ Project to interactively visualize and explore newly CC-licensed content. Create
 Open in any browser (locally or hosted)
 ```
 
+## Acknowledgements/shout-outs
+Huge thanks to the creators of https://vasturiano.github.io/3d-force-graph/ which is the core 3d-rendering JS graph library utilized in this work
+
 ## Result
 
 https://license.new (embedded)
